@@ -1,0 +1,695 @@
+{
+  "name": "Defend Denmark Job Watcher",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      },
+      "id": "5129284f-ae5e-469a-9e52-18f2ff19368f",
+      "name": "Every 30 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://platform.defenddenmark.dk/program/bug-bounty/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "c1004f75-e63f-4912-95c0-a00d8675b075",
+      "name": "Fetch Denmark",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        224,
+        384
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "MnVDt6ywWl38V5aG",
+          "name": "DefendDenmark Session Cookie"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://platform.defenddenmark.dk/program/bug-bounty/?tab=iceland",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "da24465b-aded-482e-b345-92505d4f1481",
+      "name": "Fetch Iceland",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        448,
+        384
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "MnVDt6ywWl38V5aG",
+          "name": "DefendDenmark Session Cookie"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "ZemJpYamyFLIkte1"
+        },
+        "returnAll": true
+      },
+      "id": "ac243908-a70e-4d3e-af04-6923f6c74cae",
+      "name": "Get Known Programs",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        672,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "C6JiZ8SVvYYAye2g"
+        },
+        "returnAll": true
+      },
+      "id": "1872433f-27b3-4900-bd0d-b379084a3092",
+      "name": "Get State",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        896,
+        384
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const denmarkHtml = ($('Fetch Denmark').first().json.data) || '';\nconst icelandHtml = ($('Fetch Iceland').first().json.data) || '';\nconst decode = (s) => String(s)\n  .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))\n  .replace(/&#(\\d+);/g, (_, d) => String.fromCodePoint(parseInt(d, 10)))\n  .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')\n  .replace(/&quot;/g, '\"').replace(/&#39;/g, \"'\").replace(/&apos;/g, \"'\")\n  .replace(/&nbsp;/g, ' ').replace(/\\s+/g, ' ').trim();\nconst parsePrograms = (html, country) => {\n  const results = [];\n  const re = /\\/program\\/view\\/([0-9a-f-]{36})/g;\n  const positions = []; let m;\n  while ((m = re.exec(html)) !== null) positions.push({ id: m[1], idx: m.index });\n  const seen = new Set(); let prevStart = 0;\n  for (const pos of positions) {\n    if (seen.has(pos.id)) { prevStart = pos.idx; continue; }\n    seen.add(pos.id);\n    const chunk = html.slice(prevStart, pos.idx);\n    const names = [...chunk.matchAll(/underline-on-hover[^>]*>([^<]+)<\\/h5>/g)];\n    const name = names.length ? decode(names[names.length - 1][1]) : '';\n    const pays = [...chunk.matchAll(/([\\d.]+\\s*-\\s*[\\d.]+\\s*DKK)/g)];\n    const payout = pays.length ? pays[pays.length - 1][1].replace(/\\s+/g, ' ').trim() : '';\n    results.push({ id: pos.id, name, country, payout, url: 'https://platform.defenddenmark.dk/program/view/' + pos.id });\n    prevStart = pos.idx;\n  }\n  return results;\n};\nconst loggedOut = /login\\.microsoftonline\\.com/i.test(denmarkHtml)\n  || /\\/authentication\\/login/i.test(denmarkHtml)\n  || !/Denmark\\s*\\(\\s*\\d+\\s*\\)/i.test(denmarkHtml);\nconst stateRows = $('Get State').all();\nconst state = stateRows.length ? stateRows[0].json : {};\nconst prevAlerted = state.session_alerted === true || state.session_alerted === 'true';\nconst prevDenmark = Number(state.denmark_count || 0);\nconst prevIceland = Number(state.iceland_count || 0);\nconst out = [];\nif (loggedOut) {\n  if (!prevAlerted) out.push({ json: { action: 'session_expired' } });\n  out.push({ json: { action: 'update_state', singleton: 'state', denmark_count: prevDenmark, iceland_count: prevIceland, session_alerted: true } });\n  return out;\n}\nconst programs = [...parsePrograms(denmarkHtml, 'Denmark'), ...parsePrograms(icelandHtml, 'Iceland')];\nconst dCount = Number((denmarkHtml.match(/Denmark\\s*\\(\\s*(\\d+)\\s*\\)/i) || [])[1] || 0) || prevDenmark;\nconst iCount = Number((denmarkHtml.match(/Iceland\\s*\\(\\s*(\\d+)\\s*\\)/i) || [])[1] || 0) || prevIceland;\nconst known = new Set($('Get Known Programs').all().map(r => String(r.json.program_id)).filter(Boolean));\nconst fresh = programs.filter(p => p.id && !known.has(p.id));\nfor (const p of fresh) {\n  out.push({ json: { action: 'new_program', program_id: p.id, name: p.name || '(name unavailable)', country: p.country, payout: p.payout || 'N/A', url: p.url } });\n}\nconst freshIceland = fresh.filter(p => p.country === 'Iceland').length;\nif (prevIceland > 0 && (iCount - prevIceland) > freshIceland) {\n  out.push({ json: { action: 'new_unnamed', country: 'Iceland', prev_count: prevIceland, new_count: iCount, delta: (iCount - prevIceland) - freshIceland, url: 'https://platform.defenddenmark.dk/program/bug-bounty/?tab=iceland' } });\n}\nconst freshDenmark = fresh.filter(p => p.country === 'Denmark').length;\nif (prevDenmark > 0 && (dCount - prevDenmark) > freshDenmark) {\n  out.push({ json: { action: 'new_unnamed', country: 'Denmark', prev_count: prevDenmark, new_count: dCount, delta: (dCount - prevDenmark) - freshDenmark, url: 'https://platform.defenddenmark.dk/program/bug-bounty/' } });\n}\nif (prevAlerted) out.push({ json: { action: 'session_restored' } });\nout.push({ json: { action: 'update_state', singleton: 'state', denmark_count: dCount, iceland_count: iCount, session_alerted: false } });\nreturn out;"
+      },
+      "id": "0f3e2aa7-2df1-4fe6-8dfa-2a4059d3025f",
+      "name": "Detect New Programs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "new_program"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "new_program"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "new_unnamed"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "new_unnamed"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "session_expired"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "session_expired"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "session_restored"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "session_restored"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "update_state"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "update_state"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "none"
+        }
+      },
+      "id": "97710788-3ea7-4a83-af22-24c08dbad102",
+      "name": "Route Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1344,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "C0BP2F2RR1P"
+        },
+        "text": "=🆕 *New bug bounty program on Defend Denmark*\n*{{ $('Detect New Programs').item.json.name }}* ({{ $('Detect New Programs').item.json.country }})\nPayout: {{ $('Detect New Programs').item.json.payout }}\n{{ $('Detect New Programs').item.json.url }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "id": "5fcba066-0bdf-4a1d-a1ae-a0adeeafe91a",
+      "name": "Slack: New Program",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.5,
+      "position": [
+        1568,
+        0
+      ],
+      "webhookId": "52faf3c2-0b4b-4a67-9818-ddc81f3a8cac",
+      "credentials": {
+        "slackApi": {
+          "id": "3rZfHeXI3W2RhBKa",
+          "name": "Slack account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "ZemJpYamyFLIkte1"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "program_id": "={{ $('Detect New Programs').item.json.program_id }}",
+            "name": "={{ $('Detect New Programs').item.json.name }}",
+            "country": "={{ $('Detect New Programs').item.json.country }}",
+            "payout": "={{ $('Detect New Programs').item.json.payout }}",
+            "url": "={{ $('Detect New Programs').item.json.url }}"
+          },
+          "schema": [
+            {
+              "id": "program_id",
+              "displayName": "program_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "country",
+              "displayName": "country",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "payout",
+              "displayName": "payout",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "url",
+              "displayName": "url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "6ca475ef-b332-4365-95ec-a81b672cd6ce",
+      "name": "Remember Program",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1792,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "C0BP2F2RR1P"
+        },
+        "text": "=🆕 *{{ $json.delta }} new {{ $json.country }} program(s) added* (count {{ $json.prev_count }} → {{ $json.new_count }}).\nNot on the first page — open the platform to view:\n{{ $json.url }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "id": "b3623c5d-3c88-4757-8288-ce005114b032",
+      "name": "Slack: New (Unnamed)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.5,
+      "position": [
+        1568,
+        192
+      ],
+      "webhookId": "bbb4452a-3c5b-4fd5-b9c6-e0109248a9ac",
+      "credentials": {
+        "slackApi": {
+          "id": "3rZfHeXI3W2RhBKa",
+          "name": "Slack account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "C0BP2F2RR1P"
+        },
+        "text": "=⚠️ *Defend Denmark session expired.* The job watcher can no longer log in. Please refresh the cookie in the \"DefendDenmark Session Cookie\" credential in n8n to resume monitoring.",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "id": "02f7aa33-ecf3-40f5-9b57-74eb09cf7fc7",
+      "name": "Slack: Session Expired",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.5,
+      "position": [
+        1568,
+        384
+      ],
+      "webhookId": "53769883-1788-4935-b184-63b950d41d40",
+      "credentials": {
+        "slackApi": {
+          "id": "3rZfHeXI3W2RhBKa",
+          "name": "Slack account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "C0BP2F2RR1P"
+        },
+        "text": "=✅ *Defend Denmark session restored.* The job watcher is back online.",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "id": "abc171c0-68af-4797-873d-3355d50fe772",
+      "name": "Slack: Session Restored",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.5,
+      "position": [
+        1568,
+        576
+      ],
+      "webhookId": "cf133bc5-d3e9-4af7-8fd1-7b96b0a7560b",
+      "credentials": {
+        "slackApi": {
+          "id": "3rZfHeXI3W2RhBKa",
+          "name": "Slack account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "C6JiZ8SVvYYAye2g"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "singleton",
+              "keyValue": "state"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "singleton": "state",
+            "denmark_count": "={{ $json.denmark_count }}",
+            "iceland_count": "={{ $json.iceland_count }}",
+            "session_alerted": "={{ $json.session_alerted }}"
+          },
+          "schema": [
+            {
+              "id": "singleton",
+              "displayName": "singleton",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "denmark_count",
+              "displayName": "denmark_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "iceland_count",
+              "displayName": "iceland_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "session_alerted",
+              "displayName": "session_alerted",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "92e4ba1d-5f7c-435b-a4a7-f5af24bdc060",
+      "name": "Save State",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1568,
+        768
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Every 30 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Fetch Denmark",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Denmark": {
+      "main": [
+        [
+          {
+            "node": "Fetch Iceland",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Iceland": {
+      "main": [
+        [
+          {
+            "node": "Get Known Programs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Known Programs": {
+      "main": [
+        [
+          {
+            "node": "Get State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get State": {
+      "main": [
+        [
+          {
+            "node": "Detect New Programs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect New Programs": {
+      "main": [
+        [
+          {
+            "node": "Route Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Action": {
+      "main": [
+        [
+          {
+            "node": "Slack: New Program",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack: New (Unnamed)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack: Session Expired",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack: Session Restored",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Save State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: New Program": {
+      "main": [
+        [
+          {
+            "node": "Remember Program",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "95b96040-eef7-4ead-9f3b-137c22033999",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "91c869c13dd0f426da99e786d8c05894346831362634172dc8f5b982856aa4f2"
+  },
+  "nodeGroups": [],
+  "id": "0cUJYNMmEWHic9c4",
+  "tags": []
+}
