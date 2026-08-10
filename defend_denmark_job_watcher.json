@@ -76,7 +76,8 @@
       "position": [
         672,
         384
-      ]
+      ],
+      "alwaysOutputData": true
     },
     {
       "parameters": {
@@ -96,7 +97,8 @@
         896,
         384
       ],
-      "executeOnce": true
+      "executeOnce": true,
+      "alwaysOutputData": true
     },
     {
       "parameters": {
