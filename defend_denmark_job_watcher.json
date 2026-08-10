@@ -23,19 +23,15 @@
     },
     {
       "parameters": {
-        "url": "https://platform.defenddenmark.dk/program/bug-bounty/",
+        "url": "https://burp-api.defendiceland.is/customers",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
-              "name": "User-Agent",
-              "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
-            },
-            {
               "name": "Accept",
-              "value": "text/html"
+              "value": "application/json"
             }
           ]
         },
@@ -49,7 +45,7 @@
         }
       },
       "id": "c1004f75-e63f-4912-95c0-a00d8675b075",
-      "name": "Fetch Denmark",
+      "name": "Fetch Programs",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
@@ -58,50 +54,8 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "MnVDt6ywWl38V5aG",
-          "name": "DefendDenmark Session Cookie"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "url": "https://platform.defenddenmark.dk/program/bug-bounty/?tab=iceland",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "User-Agent",
-              "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
-            },
-            {
-              "name": "Accept",
-              "value": "text/html"
-            }
-          ]
-        },
-        "options": {
-          "response": {
-            "response": {
-              "neverError": true,
-              "responseFormat": "text"
-            }
-          }
-        }
-      },
-      "id": "da24465b-aded-482e-b345-92505d4f1481",
-      "name": "Fetch Iceland",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.4,
-      "position": [
-        448,
-        384
-      ],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "MnVDt6ywWl38V5aG",
-          "name": "DefendDenmark Session Cookie"
+          "id": "",
+          "name": "DefendDenmark API Key (X-Api-Key header)"
         }
       }
     },
@@ -111,7 +65,7 @@
         "dataTableId": {
           "__rl": true,
           "mode": "id",
-          "value": "ZemJpYamyFLIkte1"
+          "value": ""
         },
         "returnAll": true
       },
@@ -130,7 +84,7 @@
         "dataTableId": {
           "__rl": true,
           "mode": "id",
-          "value": "C6JiZ8SVvYYAye2g"
+          "value": ""
         },
         "returnAll": true
       },
@@ -146,7 +100,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const denmarkHtml = ($('Fetch Denmark').first().json.data) || '';\nconst icelandHtml = ($('Fetch Iceland').first().json.data) || '';\nconst decode = (s) => String(s)\n  .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))\n  .replace(/&#(\\d+);/g, (_, d) => String.fromCodePoint(parseInt(d, 10)))\n  .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')\n  .replace(/&quot;/g, '\"').replace(/&#39;/g, \"'\").replace(/&apos;/g, \"'\")\n  .replace(/&nbsp;/g, ' ').replace(/\\s+/g, ' ').trim();\nconst parsePrograms = (html, country) => {\n  const results = [];\n  const re = /\\/program\\/view\\/([0-9a-f-]{36})/g;\n  const positions = []; let m;\n  while ((m = re.exec(html)) !== null) positions.push({ id: m[1], idx: m.index });\n  const seen = new Set(); let prevStart = 0;\n  for (const pos of positions) {\n    if (seen.has(pos.id)) { prevStart = pos.idx; continue; }\n    seen.add(pos.id);\n    const chunk = html.slice(prevStart, pos.idx);\n    const names = [...chunk.matchAll(/underline-on-hover[^>]*>([^<]+)<\\/h5>/g)];\n    const name = names.length ? decode(names[names.length - 1][1]) : '';\n    const pays = [...chunk.matchAll(/([\\d.]+\\s*-\\s*[\\d.]+\\s*DKK)/g)];\n    const payout = pays.length ? pays[pays.length - 1][1].replace(/\\s+/g, ' ').trim() : '';\n    results.push({ id: pos.id, name, country, payout, url: 'https://platform.defenddenmark.dk/program/view/' + pos.id });\n    prevStart = pos.idx;\n  }\n  return results;\n};\nconst loggedOut = /login\\.microsoftonline\\.com/i.test(denmarkHtml)\n  || /\\/authentication\\/login/i.test(denmarkHtml)\n  || !/Denmark\\s*\\(\\s*\\d+\\s*\\)/i.test(denmarkHtml);\nconst stateRows = $('Get State').all();\nconst state = stateRows.length ? stateRows[0].json : {};\nconst prevAlerted = state.session_alerted === true || state.session_alerted === 'true';\nconst prevDenmark = Number(state.denmark_count || 0);\nconst prevIceland = Number(state.iceland_count || 0);\nconst out = [];\nif (loggedOut) {\n  if (!prevAlerted) out.push({ json: { action: 'session_expired' } });\n  out.push({ json: { action: 'update_state', singleton: 'state', denmark_count: prevDenmark, iceland_count: prevIceland, session_alerted: true } });\n  return out;\n}\nconst programs = [...parsePrograms(denmarkHtml, 'Denmark'), ...parsePrograms(icelandHtml, 'Iceland')];\nconst dCount = Number((denmarkHtml.match(/Denmark\\s*\\(\\s*(\\d+)\\s*\\)/i) || [])[1] || 0) || prevDenmark;\nconst iCount = Number((denmarkHtml.match(/Iceland\\s*\\(\\s*(\\d+)\\s*\\)/i) || [])[1] || 0) || prevIceland;\nconst known = new Set($('Get Known Programs').all().map(r => String(r.json.program_id)).filter(Boolean));\nconst fresh = programs.filter(p => p.id && !known.has(p.id));\nfor (const p of fresh) {\n  out.push({ json: { action: 'new_program', program_id: p.id, name: p.name || '(name unavailable)', country: p.country, payout: p.payout || 'N/A', url: p.url } });\n}\nconst freshIceland = fresh.filter(p => p.country === 'Iceland').length;\nif (prevIceland > 0 && (iCount - prevIceland) > freshIceland) {\n  out.push({ json: { action: 'new_unnamed', country: 'Iceland', prev_count: prevIceland, new_count: iCount, delta: (iCount - prevIceland) - freshIceland, url: 'https://platform.defenddenmark.dk/program/bug-bounty/?tab=iceland' } });\n}\nconst freshDenmark = fresh.filter(p => p.country === 'Denmark').length;\nif (prevDenmark > 0 && (dCount - prevDenmark) > freshDenmark) {\n  out.push({ json: { action: 'new_unnamed', country: 'Denmark', prev_count: prevDenmark, new_count: dCount, delta: (dCount - prevDenmark) - freshDenmark, url: 'https://platform.defenddenmark.dk/program/bug-bounty/' } });\n}\nif (prevAlerted) out.push({ json: { action: 'session_restored' } });\nout.push({ json: { action: 'update_state', singleton: 'state', denmark_count: dCount, iceland_count: iCount, session_alerted: false } });\nreturn out;"
+        "jsCode": "const raw = $('Fetch Programs').first().json.data;\nlet resp = null;\ntry { resp = (typeof raw === 'string') ? JSON.parse(raw) : raw; } catch (e) { resp = null; }\nconst communities = resp && Array.isArray(resp.communities) ? resp.communities : null;\nconst stateRows = $('Get State').all();\nconst state = stateRows.length ? stateRows[0].json : {};\nconst prevAlerted = state.session_alerted === true || state.session_alerted === 'true';\nconst out = [];\nif (!communities) {\n  if (!prevAlerted) out.push({ json: { action: 'session_expired' } });\n  out.push({ json: { action: 'update_state', singleton: 'state', denmark_count: Number(state.denmark_count || 0), iceland_count: Number(state.iceland_count || 0), session_alerted: true } });\n  return out;\n}\nconst programs = [];\nfor (const c of communities) {\n  const country = c.community || 'Unknown';\n  const domain = c.communityDomain || 'defenddenmark.dk';\n  for (const cust of (c.customers || [])) {\n    const assets = Array.isArray(cust.assets) ? cust.assets : [];\n    const inScope = assets.filter(a => a && a.inScope).length;\n    programs.push({ id: cust.programId, name: cust.name || '(unnamed)', country, assetCount: assets.length, inScope, url: 'https://platform.' + domain + '/program/view/' + cust.programId });\n  }\n}\nconst known = new Set($('Get Known Programs').all().map(r => String(r.json.program_id)).filter(Boolean));\nconst fresh = programs.filter(p => p.id && !known.has(p.id));\nfor (const p of fresh) {\n  out.push({ json: { action: 'new_program', program_id: p.id, name: p.name, country: p.country, payout: p.inScope + ' in-scope / ' + p.assetCount + ' assets', url: p.url } });\n}\nconst dCount = (communities.find(c => c.community === 'Denmark') || { customers: [] }).customers.length;\nconst iCount = (communities.find(c => c.community === 'Iceland') || { customers: [] }).customers.length;\nif (prevAlerted) out.push({ json: { action: 'session_restored' } });\nout.push({ json: { action: 'update_state', singleton: 'state', denmark_count: dCount, iceland_count: iCount, session_alerted: false } });\nreturn out;"
       },
       "id": "0f3e2aa7-2df1-4fe6-8dfa-2a4059d3025f",
       "name": "Detect New Programs",
@@ -183,29 +137,6 @@
               },
               "renameOutput": true,
               "outputKey": "new_program"
-            },
-            {
-              "conditions": {
-                "options": {
-                  "caseSensitive": true,
-                  "leftValue": "",
-                  "typeValidation": "strict",
-                  "version": 1
-                },
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.action }}",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    },
-                    "rightValue": "new_unnamed"
-                  }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "new_unnamed"
             },
             {
               "conditions": {
@@ -297,9 +228,9 @@
         "channelId": {
           "__rl": true,
           "mode": "id",
-          "value": "C0BP2F2RR1P"
+          "value": "REPLACE_WITH_YOUR_SLACK_CHANNEL_ID"
         },
-        "text": "=🆕 *New bug bounty program on Defend Denmark*\n*{{ $('Detect New Programs').item.json.name }}* ({{ $('Detect New Programs').item.json.country }})\nPayout: {{ $('Detect New Programs').item.json.payout }}\n{{ $('Detect New Programs').item.json.url }}",
+        "text": "=🆕 *New bug bounty program on Defend Denmark/Iceland*\n*{{ $('Detect New Programs').item.json.name }}* ({{ $('Detect New Programs').item.json.country }})\nScope: {{ $('Detect New Programs').item.json.payout }}\n{{ $('Detect New Programs').item.json.url }}",
         "otherOptions": {
           "includeLinkToWorkflow": false
         }
@@ -315,8 +246,8 @@
       "webhookId": "52faf3c2-0b4b-4a67-9818-ddc81f3a8cac",
       "credentials": {
         "slackApi": {
-          "id": "3rZfHeXI3W2RhBKa",
-          "name": "Slack account 2"
+          "id": "",
+          "name": "Slack (set your own)"
         }
       }
     },
@@ -325,7 +256,7 @@
         "dataTableId": {
           "__rl": true,
           "mode": "id",
-          "value": "ZemJpYamyFLIkte1"
+          "value": ""
         },
         "columns": {
           "mappingMode": "defineBelow",
@@ -401,38 +332,9 @@
         "channelId": {
           "__rl": true,
           "mode": "id",
-          "value": "C0BP2F2RR1P"
+          "value": "REPLACE_WITH_YOUR_SLACK_CHANNEL_ID"
         },
-        "text": "=🆕 *{{ $json.delta }} new {{ $json.country }} program(s) added* (count {{ $json.prev_count }} → {{ $json.new_count }}).\nNot on the first page — open the platform to view:\n{{ $json.url }}",
-        "otherOptions": {
-          "includeLinkToWorkflow": false
-        }
-      },
-      "id": "b3623c5d-3c88-4757-8288-ce005114b032",
-      "name": "Slack: New (Unnamed)",
-      "type": "n8n-nodes-base.slack",
-      "typeVersion": 2.5,
-      "position": [
-        1568,
-        192
-      ],
-      "webhookId": "bbb4452a-3c5b-4fd5-b9c6-e0109248a9ac",
-      "credentials": {
-        "slackApi": {
-          "id": "3rZfHeXI3W2RhBKa",
-          "name": "Slack account 2"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "select": "channel",
-        "channelId": {
-          "__rl": true,
-          "mode": "id",
-          "value": "C0BP2F2RR1P"
-        },
-        "text": "=⚠️ *Defend Denmark session expired.* The job watcher can no longer log in. Please refresh the cookie in the \"DefendDenmark Session Cookie\" credential in n8n to resume monitoring.",
+        "text": "=⚠️ *Defend Denmark job watcher: API error.* No valid response from burp-api.defendiceland.is — the API key may be invalid/expired or the API is down. Update the \"DefendDenmark API Key\" credential in n8n if the key changed.",
         "otherOptions": {
           "includeLinkToWorkflow": false
         }
@@ -448,8 +350,8 @@
       "webhookId": "53769883-1788-4935-b184-63b950d41d40",
       "credentials": {
         "slackApi": {
-          "id": "3rZfHeXI3W2RhBKa",
-          "name": "Slack account 2"
+          "id": "",
+          "name": "Slack (set your own)"
         }
       }
     },
@@ -459,7 +361,7 @@
         "channelId": {
           "__rl": true,
           "mode": "id",
-          "value": "C0BP2F2RR1P"
+          "value": "REPLACE_WITH_YOUR_SLACK_CHANNEL_ID"
         },
         "text": "=✅ *Defend Denmark session restored.* The job watcher is back online.",
         "otherOptions": {
@@ -477,8 +379,8 @@
       "webhookId": "cf133bc5-d3e9-4af7-8fd1-7b96b0a7560b",
       "credentials": {
         "slackApi": {
-          "id": "3rZfHeXI3W2RhBKa",
-          "name": "Slack account 2"
+          "id": "",
+          "name": "Slack (set your own)"
         }
       }
     },
@@ -488,7 +390,7 @@
         "dataTableId": {
           "__rl": true,
           "mode": "id",
-          "value": "C6JiZ8SVvYYAye2g"
+          "value": ""
         },
         "matchType": "allConditions",
         "filters": {
@@ -564,29 +466,7 @@
       "main": [
         [
           {
-            "node": "Fetch Denmark",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Fetch Denmark": {
-      "main": [
-        [
-          {
-            "node": "Fetch Iceland",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Fetch Iceland": {
-      "main": [
-        [
-          {
-            "node": "Get Known Programs",
+            "node": "Fetch Programs",
             "type": "main",
             "index": 0
           }
@@ -637,13 +517,6 @@
         ],
         [
           {
-            "node": "Slack: New (Unnamed)",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
             "node": "Slack: Session Expired",
             "type": "main",
             "index": 0
@@ -662,7 +535,8 @@
             "type": "main",
             "index": 0
           }
-        ]
+        ],
+        []
       ]
     },
     "Slack: New Program": {
@@ -675,21 +549,23 @@
           }
         ]
       ]
+    },
+    "Fetch Programs": {
+      "main": [
+        [
+          {
+            "node": "Get Known Programs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
-  "active": true,
+  "active": false,
   "settings": {
     "executionOrder": "v1",
     "binaryMode": "separate",
     "availableInMCP": true
-  },
-  "versionId": "95b96040-eef7-4ead-9f3b-137c22033999",
-  "meta": {
-    "aiBuilderAssisted": true,
-    "builderVariant": "mcp",
-    "instanceId": "91c869c13dd0f426da99e786d8c05894346831362634172dc8f5b982856aa4f2"
-  },
-  "nodeGroups": [],
-  "id": "0cUJYNMmEWHic9c4",
-  "tags": []
+  }
 }
